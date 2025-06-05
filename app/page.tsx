@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, Sparkles, RotateCcw, Heart, Package } from "lucide-react"
+import { Loader2, Sparkles, RotateCcw, Heart, Package, AlertCircle } from "lucide-react"
 import { MaterialPicker } from "./components/material-picker"
 import { ProjectCard } from "./components/project-card"
 import { Confetti } from "./components/confetti"
@@ -36,14 +36,26 @@ export default function LittleLabCoats() {
   const [error, setError] = useState<string | null>(null)
   const [showConfetti, setShowConfetti] = useState(false)
   const [savedProjects, setSavedProjects] = useState<Project[]>([])
+  const [mounted, setMounted] = useState(false)
 
-  // Load saved projects from localStorage
+  // Handle hydration
   useEffect(() => {
-    const saved = localStorage.getItem("little-lab-coats-saved")
-    if (saved) {
-      setSavedProjects(JSON.parse(saved))
-    }
+    setMounted(true)
   }, [])
+
+  // Load saved projects from localStorage only after mounting
+  useEffect(() => {
+    if (mounted && typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("little-lab-coats-saved")
+        if (saved) {
+          setSavedProjects(JSON.parse(saved))
+        }
+      } catch (error) {
+        console.error("Error loading saved projects:", error)
+      }
+    }
+  }, [mounted])
 
   const toggleMaterial = (materialId: string) => {
     setSelectedMaterials((prev) =>
@@ -61,7 +73,11 @@ export default function LittleLabCoats() {
     setError(null)
 
     try {
-      const selectedNames = selectedMaterials.map((id) => materials.find((m) => m.id === id)?.name).filter(Boolean)
+      const selectedNames = selectedMaterials
+        .map((id) => materials.find((m) => m.id === id)?.name)
+        .filter((name): name is string => Boolean(name))
+
+      console.log("Sending materials:", selectedNames)
 
       const response = await fetch("/api/generate-project", {
         method: "POST",
@@ -69,24 +85,50 @@ export default function LittleLabCoats() {
         body: JSON.stringify({ materials: selectedNames }),
       })
 
-      if (!response.ok) throw new Error("Failed to generate projects")
-
+      // Always try to get the JSON response, even if status isn't ok
       const data = await response.json()
-      setProjects(Array.isArray(data) ? data : [data])
-      setShowConfetti(true)
-      setTimeout(() => setShowConfetti(false), 3000)
+      console.log("Received response:", data)
+
+      // Check if we got a valid project
+      if (data && data.name && data.instructions && Array.isArray(data.instructions)) {
+        setProjects([data])
+        setShowConfetti(true)
+        setTimeout(() => setShowConfetti(false), 3000)
+      } else if (data.error) {
+        throw new Error(data.error)
+      } else {
+        throw new Error("Invalid project data received")
+      }
     } catch (err) {
-      setError("Oops! Our idea brain needs a moment. Try again! 🤖")
-      console.error(err)
+      console.error("Error in generateProjects:", err)
+      setError("Don't worry! Even real scientists have experiments that don't work the first time. Let's try again! 🔬")
     } finally {
       setLoading(false)
     }
   }
 
   const saveProject = (project: Project) => {
-    const updated = [...savedProjects, project]
-    setSavedProjects(updated)
-    localStorage.setItem("little-lab-coats-saved", JSON.stringify(updated))
+    if (typeof window !== "undefined") {
+      try {
+        const updated = [...savedProjects, project]
+        setSavedProjects(updated)
+        localStorage.setItem("little-lab-coats-saved", JSON.stringify(updated))
+      } catch (error) {
+        console.error("Error saving project:", error)
+      }
+    }
+  }
+
+  // Don't render until mounted to avoid hydration issues
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">🥽</div>
+          <div className="text-xl text-purple-600">Loading Little Lab Coats...</div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -105,7 +147,7 @@ export default function LittleLabCoats() {
           <CardContent className="p-6">
             <h2 className="text-2xl font-bold text-purple-800 mb-4 flex items-center gap-2">
               <Package className="w-6 h-6" />
-              What's in your lab today?
+              {"What's in your lab today?"}
             </h2>
             <MaterialPicker
               materials={materials}
@@ -117,7 +159,8 @@ export default function LittleLabCoats() {
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-red-100 border-2 border-red-300 rounded-xl text-red-700 text-center font-medium">
+          <div className="mb-6 p-4 bg-orange-100 border-2 border-orange-300 rounded-xl text-orange-700 text-center font-medium flex items-center justify-center gap-2">
+            <AlertCircle className="w-5 h-5" />
             {error}
           </div>
         )}

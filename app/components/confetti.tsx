@@ -16,6 +16,9 @@ export function Confetti() {
   >([])
 
   useEffect(() => {
+    // Check if we're in the browser
+    if (typeof window === "undefined") return
+
     const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD", "#98D8C8"]
     const newParticles = Array.from({ length: 50 }, (_, i) => ({
       id: i,
@@ -52,6 +55,11 @@ export function Confetti() {
       clearTimeout(timeout)
     }
   }, [])
+
+  // Don't render on server
+  if (typeof window === "undefined") {
+    return null
+  }
 
   return (
     <div className="fixed inset-0 pointer-events-none z-50">
